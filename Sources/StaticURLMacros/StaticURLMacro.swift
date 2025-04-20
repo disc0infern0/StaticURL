@@ -4,6 +4,8 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftSyntaxMacroExpansion
 import Foundation
+import SwiftDiagnostics
+import SwiftParserDiagnostics
 
 /// Implementation of the `staticURL` macro, which takes a static string and returns a non optional URL.
 /// For example
@@ -27,21 +29,19 @@ public struct StaticURLMacro: ExpressionMacro {
               let literal = argument.as(StringLiteralExprSyntax.self),
               case .stringSegment(let segment) = literal.segments.first
         else {
-            context
-                .addDiagnostics(
-                    from: StaticURLMacroError.notAStringLiteral,
-                    node: DeclSyntax(stringLiteral: "notAStringLiteral")
-                )
+            context.diagnose(
+                Diagnostic( node: node, message: MacroExpansionErrorMessage("Not a string") )
+            )
+            context.addDiagnostics( from: StaticURLMacroError.notAStringLiteral, node: node )
             throw StaticURLMacroError.notAStringLiteral
         }
         
         // Verify that the passed string is indeed a valid URL:
         guard URL(string: segment.content.text) != nil else {
-            context
-                .addDiagnostics(
-                    from: StaticURLMacroError.invalidURL,
-                    node: DeclSyntax(stringLiteral: "Invalid URL")
-                )
+            context.diagnose( 
+                Diagnostic( node: node, message: MacroExpansionErrorMessage("Invalid URL"))
+            )
+            context.addDiagnostics( from: StaticURLMacroError.invalidURL, node: node )
             throw StaticURLMacroError.invalidURL
         }
         
