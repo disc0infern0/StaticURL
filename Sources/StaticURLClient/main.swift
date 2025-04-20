@@ -1,6 +1,6 @@
 import StaticURL
 import Foundation
 
-let url = #staticURL("https://swiftbysundell.com")
+//let url = #staticURL("https://swiftbysundell.com")
+//let fail = #staticURL("http:// swiftbysundell.com")
 
-print("The value \(url.absoluteString) was produced by the code ")

@@ -1,11 +1,13 @@
 import SwiftCompilerPlugin
 import SwiftSyntax
-import SwiftSyntaxBuilder
+//import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftSyntaxMacroExpansion
-import Foundation
+//import SwiftSyntaxMacroExpansion
 import SwiftDiagnostics
-import SwiftParserDiagnostics
+//import SwiftParserDiagnostics
+import SwiftOperators
+
+import Foundation
 
 /// Implementation of the `staticURL` macro, which takes a static string and returns a non optional URL.
 /// For example
@@ -29,20 +31,43 @@ public struct StaticURLMacro: ExpressionMacro {
               let literal = argument.as(StringLiteralExprSyntax.self),
               case .stringSegment(let segment) = literal.segments.first
         else {
-            context.diagnose(
-                Diagnostic( node: node, message: MacroExpansionErrorMessage("Not a string") )
-            )
             context.addDiagnostics( from: StaticURLMacroError.notAStringLiteral, node: node )
             throw StaticURLMacroError.notAStringLiteral
         }
         
-        // Verify that the passed string is indeed a valid URL:
-        guard URL(string: segment.content.text) != nil else {
-            context.diagnose( 
-                Diagnostic( node: node, message: MacroExpansionErrorMessage("Invalid URL"))
-            )
-            context.addDiagnostics( from: StaticURLMacroError.invalidURL, node: node )
-            throw StaticURLMacroError.invalidURL
+        /// **Verify that the passed string is indeed a well formed URL:**
+        ///  - Treat invalid characters as an error
+        ///  - Check the address begins with http or https
+        ///  - Have a non nil hostname
+        ///  
+        var url: URL?
+        if #available(macOS 14.0, *) {
+            url = URL(string: segment.content.text, encodingInvalidCharacters: false)
+        } else {
+            url = URL(string: segment.content.text)
+        }
+        if url == nil {
+            context
+                .addDiagnostics(
+                    from: StaticURLMacroError.invalidURL,
+                    node: Syntax(argument)
+                )
+//            throw StaticURLMacroError.invalidURL
+        }
+        else if !(url?.scheme ?? "").contains("http") {
+            context
+                .addDiagnostics(
+                    from: StaticURLMacroError.invalidScheme,
+                    node: Syntax(argument)
+                )
+            
+        }
+        else if (url!.host == nil) {
+            context
+                .addDiagnostics(
+                    from: StaticURLMacroError.invalidHost,
+                    node: Syntax(argument)
+                )
         }
         
         // Generate the code required to construct a URL value
@@ -54,6 +79,8 @@ public struct StaticURLMacro: ExpressionMacro {
 public enum StaticURLMacroError: String, Error, CustomStringConvertible {
     case notAStringLiteral = "Argument is not a string literal"
     case invalidURL = "Argument is not a valid URL"
+    case invalidScheme = "Web URL's must start with 'http://' or 'https://"
+    case invalidHost = "Web URL's must contain a valid hostname"
     
     public var description: String { rawValue }
 }
