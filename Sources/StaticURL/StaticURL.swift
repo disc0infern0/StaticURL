@@ -9,9 +9,12 @@
 
 import Foundation
 
+
 @freestanding(expression)
 public macro staticURL(_ value: StaticString) -> URL = 
     #externalMacro( module: "StaticURLMacros", type: "StaticURLMacro" )
+
+
 
 /// To add dynamic components, use overloads of the appending API as in the following example
 ///

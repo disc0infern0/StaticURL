@@ -20,5 +20,23 @@
 			<integer>2</integer>
 		</dict>
 	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>StaticURL</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>StaticURLClient</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>StaticURLTests</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+	</dict>
 </dict>
 </plist>

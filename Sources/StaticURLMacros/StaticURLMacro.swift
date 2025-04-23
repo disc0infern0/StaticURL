@@ -1,11 +1,11 @@
-import SwiftCompilerPlugin
+
 import SwiftSyntax
 //import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
+import SwiftSyntaxBuilder
 //import SwiftSyntaxMacroExpansion
 import SwiftDiagnostics
-//import SwiftParserDiagnostics
-import SwiftOperators
+import SwiftCompilerPlugin
 
 import Foundation
 
@@ -23,66 +23,83 @@ public struct StaticURLMacro: ExpressionMacro {
         of node: some FreestandingMacroExpansionSyntax,
         in context: some MacroExpansionContext
     ) throws -> ExprSyntax {
-        // Verify that a string literal was passed, and extract
-        // the first segment. We can be sure that only one
-        // segment exists, since we're only accepting static
-        // strings (which cannot have any dynamic components):
+        // One string literal argument is required by the compiler. 
+        // The text of the first segment contains the URL string passed in.
+        
         guard let argument = node.arguments.first?.expression,
-              let literal = argument.as(StringLiteralExprSyntax.self),
-              case .stringSegment(let segment) = literal.segments.first
+              let literal = argument.as(StringLiteralExprSyntax.self)
         else {
-            context.addDiagnostics( from: StaticURLMacroError.notAStringLiteral, node: node )
-            throw StaticURLMacroError.notAStringLiteral
+            let d = Diagnostic( node: node, message: StaticURLMacroDiagnostic.notAStringLiteral )
+            context.diagnose(d)
+            return ""
         }
         
+        // get the urlstring from the first string literal segment
+        let urlString = switch literal.segments.first {
+            case .stringSegment(let segment): segment.content.text
+            default: fatalError()
+        }
+
         /// **Verify that the passed string is indeed a well formed URL:**
         ///  - Treat invalid characters as an error
         ///  - Check the address begins with http or https
         ///  - Have a non nil hostname
         ///  
-        var url: URL?
-        if #available(macOS 14.0, *) {
-            url = URL(string: segment.content.text, encodingInvalidCharacters: false)
-        } else {
-            url = URL(string: segment.content.text)
-        }
+        
+        let url: URL? = 
+            if #available(macOS 14.0, *) {
+                URL(string: urlString, encodingInvalidCharacters: false)
+            } else { 
+                URL(string: urlString) 
+            }
         if url == nil {
-            context
-                .addDiagnostics(
-                    from: StaticURLMacroError.invalidURL,
-                    node: Syntax(argument)
-                )
-//            throw StaticURLMacroError.invalidURL
+            return context.report(StaticURLMacroDiagnostic.invalidURL, argument: argument )
         }
-        else if !(url?.scheme ?? "").contains("http") {
-            context
-                .addDiagnostics(
-                    from: StaticURLMacroError.invalidScheme,
-                    node: Syntax(argument)
-                )
-            
+        
+        if !(url?.scheme ?? "").contains("http") {
+            return context.report(StaticURLMacroDiagnostic.invalidScheme, argument: argument )
         }
-        else if (url!.host == nil) {
-            context
-                .addDiagnostics(
-                    from: StaticURLMacroError.invalidHost,
-                    node: Syntax(argument)
-                )
+        
+        if (url!.host == nil) {
+            return context.report(StaticURLMacroDiagnostic.invalidHost, argument: argument )
         }
         
         // Generate the code required to construct a URL value
         // for the passed string at runtime:
         return "Foundation.URL(string: \(argument))!"
     }
+    
 }
 
-public enum StaticURLMacroError: String, Error, CustomStringConvertible {
-    case notAStringLiteral = "Argument is not a string literal"
-    case invalidURL = "Argument is not a valid URL"
-    case invalidScheme = "Web URL's must start with 'http://' or 'https://"
-    case invalidHost = "Web URL's must contain a valid hostname"
+extension MacroExpansionContext {
+    public func report(_ m: DiagnosticMessage, argument: ExprSyntax) -> ExprSyntax {
+        let d = Diagnostic(node: Syntax(argument), message: m)
+        self.diagnose(d)
+        return "\(raw: m.message)"
+    } 
+}
     
-    public var description: String { rawValue }
+
+
+enum StaticURLMacroDiagnostic: String, DiagnosticMessage {
+    case notAStringLiteral, invalidURL, invalidScheme, invalidHost
+    public var severity: DiagnosticSeverity { 
+        switch self {
+//            case .invalidHost: .warning
+            default : .error
+        }
+    }
+    public var message: String { 
+         switch self {
+            case .notAStringLiteral : "Argument is not a string literal"
+            case .invalidURL : "Argument is not a valid URL"
+            case .invalidScheme : "Web URL's must start with 'http://' or 'https://"
+            case .invalidHost : "Web URL's must contain a valid hostname"
+        }
+    }
+    public var diagnosticID: MessageID { 
+        MessageID(domain: "StaticURLMacros" , id: rawValue )
+    }
 }
 
 @main struct StaticURLPlugin: CompilerPlugin {
